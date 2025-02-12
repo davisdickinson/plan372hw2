@@ -1,0 +1,343 @@
+---
+title: "HW #2"
+author: "Davis "
+format: pdf
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+# Introduction
+
+This document analyzes a restaurant inspections dataset. The analysis includes data loading, exploration, cleaning, and visualizations to answer several questions related to inspection scores, trends over time, comparisons by city, inspector, facility type, and a focused analysis on restaurants.
+
+# Setup
+
+We start by loading the required libraries.
+
+```{r}
+library(readr)    # for reading CSV files
+library(dplyr)    # for data manipulation
+library(ggplot2)  # for plotting
+library(stringr)  # for string manipulation
+
+```
+
+# Load the Data
+
+Check the current working directory and load the dataset.
+
+```{r}
+# Check current working directory
+getwd()
+
+# Load the dataset
+restaruant_data <- read_csv("/Users/SchoolAccount/Desktop/plan372_hm1repo/HWS/restaurant_inspections_geo.csv")
+
+```
+
+# Data Exploration
+
+Examine the dataset by checking its dimensions, the first few rows, summary statistics, column names, and overall structure.
+
+```{r}
+# Dimensions of the dataset: number of rows and columns
+dim(restaruant_data)
+
+# Display the first six rows of the dataset
+head(restaruant_data)
+
+# Summary of numeric columns
+summary(restaruant_data)
+
+# Names of the columns
+names(restaruant_data)
+
+# Structure of the dataset (includes types of each column)
+str(restaruant_data)
+
+```
+
+# Data Cleaning
+
+Count missing values per column, filter out rows with missing values in vital columns (CITY, FACILITYTYPE, SCORE), and check for duplicate rows.
+
+```{r}
+# Count missing data in each column
+colSums(is.na(restaruant_data))
+
+# Filter out rows with missing values in CITY, FACILITYTYPE, and SCORE
+restaruant_data <- restaruant_data %>% 
+  filter(!is.na(CITY) & !is.na(FACILITYTYPE) & !is.na(SCORE))
+
+# Check the dimensions after filtering
+dim(restaruant_data)
+
+# Check for any duplicate rows (should return 0 if there are none)
+sum(duplicated(restaruant_data))
+```
+
+# Question 1: Distribution of Inspection Scores
+
+Visualize the overall distribution of inspection scores using a histogram.
+
+```{r}
+ggplot(restaruant_data, aes(x = SCORE)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black") +
+  labs(title = "Distribution of Inspection Scores",
+       x = "Inspection Score",
+       y = "Count") +
+  theme_minimal()
+```
+
+# Question 2: Trends in Inspection Scores Over Time
+
+Investigate whether there are trends over time by extracting the year from the `DATE_` column and calculating the average inspection score per year.
+
+```{r}
+# Extract the year from the DATE_ column
+restaruant_data$INSPECTION_YEAR <- format(restaruant_data$DATE_, "%Y")
+
+# Group by year and calculate the average inspection score
+avg_score_by_year <- restaruant_data %>%
+  group_by(INSPECTION_YEAR) %>%
+  summarize(Average_Score = mean(SCORE, na.rm = TRUE))
+
+# Plot the trend over the years
+ggplot(avg_score_by_year, aes(x = INSPECTION_YEAR, y = Average_Score, group = 1)) +
+  geom_line(color = "blue") +
+  labs(title = "Average Inspection Score Over Time",
+       x = "Year",
+       y = "Average Score") +
+  theme_minimal()
+```
+
+Scores peaked in 2020 and were at their lowest in 2017.
+
+# Question 3: Inspection Scores by City
+
+Check if inspection scores vary by city by standardizing city names and calculating average scores.
+
+```{r}
+# Standardize CITY names to uppercase
+restaruant_data$CITY <- str_to_upper(restaruant_data$CITY)
+
+# Group by CITY and calculate average inspection score and count
+avg_score_by_city <- restaruant_data %>%
+  group_by(CITY) %>%
+  summarize(Average_Score = mean(SCORE, na.rm = TRUE), Count = n())
+
+# Create a bar plot for average scores by city
+ggplot(avg_score_by_city, aes(x = reorder(CITY, -Average_Score), y = Average_Score)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Average Inspection Score by City",
+       x = "City",
+       y = "Average Score") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+Inspection scores do not vary by city.
+
+# Question 4: Inspection Scores by Inspector
+
+Summarize the average score and the number of inspections for each inspector.
+
+```{r}
+inspector_summary <- restaruant_data %>%
+  group_by(INSPECTOR) %>%
+  summarize(
+    Average_Score = mean(SCORE, na.rm = TRUE),
+    Inspection_Count = n()
+  ) %>%
+  arrange(desc(Average_Score))
+
+# Display the inspector summary table
+inspector_summary
+
+
+```
+
+Inspection scores basically do not vary by inspector.
+
+# Question 5: Sample Size Considerations
+
+Examine the sample sizes for each group (city, inspector, and year) to assess if small sample sizes might affect the results.
+
+```{r}
+# Sample size by city
+avg_score_by_city %>%  
+  select(CITY, Count) %>%
+  arrange(Count)
+
+# Inspectors with less than 5 inspections
+inspector_summary %>%
+  filter(Inspection_Count < 5)
+
+# Sample size by year
+yearly_sample_size <- restaruant_data %>% 
+  group_by(INSPECTION_YEAR) %>%
+  summarize(Inspection_Count = n()) %>%
+  arrange(INSPECTION_YEAR)
+
+# Display the sample size by year
+yearly_sample_size
+```
+
+There were a lot more inspections in certain cities than others (max 196, min 1). There were also a lot more inspections in the year 2021 (2853) than 2017 (1).
+
+# Question 6: Inspection Scores by Facility Type
+
+Determine whether the scores for restaurants are higher than for other types of food-service facilities by grouping by `FACILITYTYPE`.
+
+```{r}
+# Group by FACILITYTYPE and calculate average score and count
+facility_summary <- restaruant_data %>%
+  group_by(FACILITYTYPE) %>%
+  summarize(
+    Average_Score = mean(SCORE, na.rm = TRUE),
+    Inspection_Count = n()
+  ) %>%
+  arrange(desc(Average_Score))
+
+# View the facility summary table
+facility_summary
+
+# Bar plot of average score by facility type
+ggplot(facility_summary, aes(x = reorder(FACILITYTYPE, -Average_Score), y = Average_Score)) +
+  geom_bar(stat = "identity", fill = "lightgreen") +
+  labs(title = "Average Inspection Score by Facility Type",
+       x = "Facility Type",
+       y = "Average Score") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+All of the facilities are about the same. Nutrition sites and school lunchrooms generally score much better than restaurants.
+
+# Question 7: Analyses for Restaurants Specifically
+
+Repeat the analyses above for restaurants only by first filtering the dataset.
+
+```{r}
+# Filter the data for restaurants only
+restaruant_only <- restaruant_data %>%
+  filter(FACILITYTYPE == "Restaurant")
+
+# Check the number of observations for restaurants
+nrow(restaruant_only)
+
+```
+
+## 7.1: Histogram of Inspection Scores for Restaurants
+
+```{r}
+ggplot(restaruant_only, aes(x = SCORE)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black") +
+  labs(title = "Distribution of Inspection Scores for Restaurants",
+       x = "Inspection Score",
+       y = "Count") +
+  theme_minimal()
+
+```
+
+## 7.2: Inspection Trends by Year for Restaurants
+
+Extract the year for restaurants and plot the average inspection score by year.
+
+```{r}
+# Extract the year from the DATE_ column for restaurants
+restaruant_only$INSPECTION_YEAR <- format(restaruant_only$DATE_, "%Y")
+
+# Group by year and calculate the average score for restaurants
+avg_score_restaurants_by_year <- restaruant_only %>%
+  group_by(INSPECTION_YEAR) %>%
+  summarize(Average_Score = mean(SCORE, na.rm = TRUE))
+
+# Plot the trend over the years for restaurants
+ggplot(avg_score_restaurants_by_year, aes(x = INSPECTION_YEAR, y = Average_Score, group = 1)) +
+  geom_line(color = "blue") +
+  labs(title = "Average Inspection Score for Restaurants by Year",
+       x = "Year",
+       y = "Average Score") +
+  theme_minimal()
+```
+
+Peaked in 2020 and lowest in 2021.
+
+## 7.3: Inspection Scores by City for Restaurants
+
+```{r}
+# Group by CITY and calculate average score and count for restaurants
+avg_score_restaurants_by_city <- restaruant_only %>%
+  group_by(CITY) %>%
+  summarize(Average_Score = mean(SCORE, na.rm = TRUE), Count = n())
+
+# Display the table for restaurants by city
+avg_score_restaurants_by_city
+```
+
+Lot more inspections in the cities with higher scores.
+
+## 7.4: Inspection Scores by Inspector for Restaurants
+
+```{r}
+# Group by INSPECTOR and calculate average score and inspection count for restaurants
+inspector_summary_restaurants <- restaruant_only %>%
+  group_by(INSPECTOR) %>%
+  summarize(
+    Average_Score = mean(SCORE, na.rm = TRUE),
+    Inspection_Count = n()
+  ) %>%
+  arrange(desc(Average_Score))
+
+# Display the inspector summary table for restaurants
+inspector_summary_restaurants
+
+```
+
+No major outliers, all about the same.
+
+## 7.5: Sample Size Check for Restaurants
+
+Examine sample sizes by city, inspector, and year for the restaurant-only subset.
+
+```{r}
+# Sample size by city for restaurants
+avg_score_restaurants_by_city %>%
+  select(CITY, Count) %>%
+  arrange(Count)
+
+# Inspectors with fewer than 5 inspections among restaurants
+inspector_summary_restaurants %>%
+  filter(Inspection_Count < 5)
+
+# Sample size by year for restaurants
+yearly_sample_size_restaurants <- restaruant_only %>%
+  group_by(INSPECTION_YEAR) %>%
+  summarize(Inspection_Count = n()) %>%
+  arrange(INSPECTION_YEAR)
+
+# Display the sample size by year for restaurants
+yearly_sample_size_restaurants
+```
+
+Big differences in number of inspections in different cities and the different years.
