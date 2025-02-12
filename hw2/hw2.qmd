@@ -341,3 +341,5 @@ yearly_sample_size_restaurants
 ```
 
 Big differences in number of inspections in different cities and the different years.
+
+Github repo: <https://github.com/davisdickinson/plan372hw2.git>
